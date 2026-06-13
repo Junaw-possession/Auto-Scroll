@@ -1,0 +1,85 @@
+PDF 自动滚动阅读器 0.3.1 说明
+
+一、文件位置
+
+开发源码：
+C:\Users\1\Documents\Codex\2026-06-12\latex-pdf\outputs\latex-auto-scroll-reader
+
+安装包：
+C:\Users\1\Documents\Codex\2026-06-12\latex-pdf\outputs\latex-auto-scroll-reader-0.3.1.vsix
+
+桌面交付副本：
+C:\Users\1\Desktop\pdf_auto_read
+
+VS Code 安装后的扩展目录通常为：
+C:\Users\1\.vscode\extensions\local.latex-auto-scroll-reader-0.3.1
+
+二、安装与使用
+
+在 PowerShell 中执行：
+code --install-extension "C:\Users\1\Desktop\pdf_auto_read\latex-auto-scroll-reader-0.3.1.vsix" --force
+
+安装后重启 VS Code，或执行“开发人员: 重新加载窗口”。
+
+打开任意 PDF 后，点击 PDF 标签页右上角的播放按钮。当前标签将切换为自动阅读器并开始滚动。Ctrl+Alt+Space 用于开始或暂停，Ctrl+Alt+. 提速，Ctrl+Alt+, 降速。
+
+扩展不会修改 PDF 文件，也不会改变 LaTeX Workshop 的默认 PDF 打开方式。切回普通预览可使用阅读器错误页的“Open normal preview”，或在标签页上选择“重新打开方式”。
+
+三、0.3.1 修复
+
+1. VS Code 启动时提前注册 PDF provider，可恢复重启前的阅读器标签。
+2. 恢复每个 PDF 的阅读位置、速度、缩放和滚动/暂停状态。
+3. PDF 不存在、无效或暂时被编译程序替换时，在标签内显示错误、重试和普通预览入口。
+4. PDF.js 首次加载失败后自动清除缓存参数重试一次。
+5. 大型 PDF 继续通过 Webview URL 流式加载，不会整体复制到扩展消息。
+6. 输出面板新增“PDF Auto Scroll Reader”日志通道。
+
+四、主要文件作用
+
+package.json
+扩展清单。声明版本、启动方式、命令、快捷键、标题栏按钮、自定义 PDF 编辑器和设置。
+
+src\extension.js
+扩展主程序。注册 provider、打开与恢复阅读器、监控 PDF 更新、保存状态、处理 SyncTeX 和输出日志。
+
+src\pdfValidation.js
+打开前检查 PDF 是否存在、是否为文件及是否包含有效 PDF 文件头；支持编译替换期间的有限重试。
+
+src\pdfResolver.js
+从当前 PDF、TeX 文件或 LaTeX Workshop 输出目录定位目标 PDF。
+
+src\synctex.js
+执行和解析 SyncTeX 反向搜索，处理 Windows 中文路径及百分号编码 URI。
+
+media\reader.mjs
+Webview 阅读器前端。负责 PDF.js 加载、连续页面、自动滚动、暂停、调速、缩放、重试和状态恢复。
+
+media\reader.css
+阅读器界面样式。
+
+media\pdf.min.mjs、media\pdf.worker.min.mjs
+内置 PDF.js。负责解析和渲染 PDF，不依赖网络。
+
+test
+自动化测试。验证 PDF 定位、文件验证和 SyncTeX 路径处理。
+
+README.md
+中文使用和排错文档。
+
+latex-auto-scroll-reader-0.3.1.vsix
+最终安装包。VS Code 实际安装只需要这个文件。
+
+五、文件协同关系
+
+package.json 启动 src\extension.js。extension.js 验证 PDF 后创建 Webview，并加载 media\reader.mjs。reader.mjs 使用内置 PDF.js 渲染 PDF，通过消息与 extension.js 同步位置和运行状态。Ctrl+左击时，extension.js 调用 synctex.js 定位源码。PDF 重新生成时，extension.js 监控文件并通知 reader.mjs 刷新。
+
+六、哪些文件可以删除
+
+确认 0.3.1 已安装后，删除以下交付文件不会影响已安装扩展：
+
+- 桌面的 0.3.1 VSIX 安装包
+- 桌面的源码副本
+- 本说明文档
+- 工作目录中的旧版 latex-auto-scroll-reader-0.3.0.vsix
+
+不要手动删除 C:\Users\1\.vscode\extensions\local.latex-auto-scroll-reader-0.3.1，否则扩展将无法使用。

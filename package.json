@@ -1,0 +1,141 @@
+{
+  "name": "latex-auto-scroll-reader",
+  "displayName": "PDF Auto Scroll Reader",
+  "description": "A teleprompter-style reader for any PDF, with optional SyncTeX navigation.",
+  "version": "0.3.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [
+    "*",
+    "onCommand:latexAutoScroll.open",
+    "onCommand:latexAutoScroll.openAndStart",
+    "onCommand:latexAutoScroll.toggle",
+    "onCommand:latexAutoScroll.faster",
+    "onCommand:latexAutoScroll.slower",
+    "onCustomEditor:latex-auto-scroll-reader.reader"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "latexAutoScroll.open",
+        "title": "PDF 自动滚动: 打开阅读器"
+      },
+      {
+        "command": "latexAutoScroll.openAndStart",
+        "title": "PDF 自动滚动: 打开并开始",
+        "icon": "$(play)"
+      },
+      {
+        "command": "latexAutoScroll.toggle",
+        "title": "PDF 自动滚动: 开始/暂停"
+      },
+      {
+        "command": "latexAutoScroll.faster",
+        "title": "PDF 自动滚动: 提高速度"
+      },
+      {
+        "command": "latexAutoScroll.slower",
+        "title": "PDF 自动滚动: 降低速度"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "latex-auto-scroll-reader.reader",
+        "displayName": "PDF 自动滚动阅读器",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          },
+          {
+            "filenamePattern": "*.PDF"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "latexAutoScroll.openAndStart",
+          "when": "resourceExtname =~ /\\.pdf$/i && activeCustomEditorId != 'latex-auto-scroll-reader.reader'",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "latexAutoScroll.openAndStart",
+          "when": "resourceExtname =~ /\\.pdf$/i && activeCustomEditorId != 'latex-auto-scroll-reader.reader'",
+          "group": "1_open"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "latexAutoScroll.toggle",
+        "key": "ctrl+alt+space"
+      },
+      {
+        "command": "latexAutoScroll.faster",
+        "key": "ctrl+alt+."
+      },
+      {
+        "command": "latexAutoScroll.slower",
+        "key": "ctrl+alt+,"
+      }
+    ],
+    "configuration": {
+      "title": "LaTeX PDF Auto Scroll",
+      "properties": {
+        "latexAutoScroll.defaultSpeed": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Default scrolling speed in pixels per second."
+        },
+        "latexAutoScroll.minimumSpeed": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Minimum speed shown by the reader slider."
+        },
+        "latexAutoScroll.maximumSpeed": {
+          "type": "number",
+          "default": 200,
+          "minimum": 2,
+          "maximum": 2000,
+          "description": "Maximum speed shown by the reader slider."
+        },
+        "latexAutoScroll.rememberReadingPosition": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember speed, zoom, reading position, and running state for each PDF."
+        },
+        "latexAutoScroll.pauseOnMouseMove": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pause while scrolling when the mouse moves inside the PDF area."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.2"
+  }
+}
