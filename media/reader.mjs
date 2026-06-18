@@ -14,6 +14,8 @@ const elements = {
   zoomOut: document.querySelector('#zoomOut'),
   zoomIn: document.querySelector('#zoomIn'),
   zoomValue: document.querySelector('#zoomValue'),
+  loadProgress: document.querySelector('#loadProgress'),
+  stageName: document.querySelector('#stageName'),
   status: document.querySelector('#status'),
   scroller: document.querySelector('#scroller'),
   document: document.querySelector('#document'),
@@ -39,6 +41,9 @@ let zoom = bootstrap.state.zoom;
 let requestedRatio = bootstrap.state.ratio;
 let resumeAfterLoad = Boolean(bootstrap.state.running);
 let automaticRetryUsed = false;
+let stageAnimationId;
+let currentStage;
+let currentPercent = 0;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Number(value)));
@@ -165,7 +170,104 @@ function showLoadError(error) {
   elements.messageText.textContent =
     `Unable to load this PDF.\n\n${message}`;
   elements.status.textContent = 'PDF load failed';
+  hideStage();
   vscode.postMessage({ type: 'loadError', message });
+}
+
+function renderStage(stageName, value) {
+  const percent = Math.floor(clamp(value, 0, 100));
+  elements.loadProgress.hidden = false;
+  elements.stageName.textContent = stageName;
+  elements.loadProgress.querySelector('strong').textContent = `${percent}%`;
+  elements.loadProgress.title = `正在运行：${stageName} ${percent}%`;
+  elements.status.textContent = elements.loadProgress.title;
+}
+
+function stopStageAnimation() {
+  if (stageAnimationId) {
+    cancelAnimationFrame(stageAnimationId);
+    stageAnimationId = undefined;
+  }
+}
+
+function showStage(stageName, value) {
+  currentPercent = Math.max(currentPercent, clamp(value, 0, 100));
+  renderStage(stageName, currentPercent);
+}
+
+function beginStage(stageName, start, end, { smooth = true } = {}) {
+  stopStageAnimation();
+  currentStage = { stageName, start, end };
+  currentPercent = Math.max(currentPercent, start);
+  renderStage(stageName, currentPercent);
+
+  if (!smooth) return;
+  const target = Math.max(start, end - 1);
+  const initial = currentPercent;
+  const startedAt = performance.now();
+  const duration = 1200;
+
+  const animate = (time) => {
+    if (!currentStage || currentStage.stageName !== stageName) return;
+    const elapsedRatio = clamp((time - startedAt) / duration, 0, 1);
+    const easedRatio = 1 - (1 - elapsedRatio) ** 2;
+    showStage(stageName, initial + (target - initial) * easedRatio);
+    if (currentPercent < target) {
+      stageAnimationId = requestAnimationFrame(animate);
+    } else {
+      stageAnimationId = undefined;
+    }
+  };
+
+  stageAnimationId = requestAnimationFrame(animate);
+}
+
+function updateStageProgress(stageName, ratio) {
+  if (!currentStage || currentStage.stageName !== stageName) return;
+  stopStageAnimation();
+  const progress = clamp(ratio, 0, 1);
+  showStage(
+    stageName,
+    currentStage.start + progress * (currentStage.end - currentStage.start)
+  );
+}
+
+function hideStage(label) {
+  stopStageAnimation();
+  elements.loadProgress.hidden = true;
+  elements.stageName.textContent = '打开阅读器';
+  elements.loadProgress.querySelector('strong').textContent = '0%';
+  elements.loadProgress.title = '';
+  currentStage = undefined;
+  currentPercent = 0;
+  if (label) elements.status.textContent = label;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const precision = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function updateLoadProgress(progress) {
+  const loaded = Number(progress?.loaded) || 0;
+  const total = Number(progress?.total) || 0;
+  if (total > 0) {
+    const percent = clamp((loaded / total) * 100, 0, 100);
+    updateStageProgress('读取PDF', percent / 100);
+    elements.status.textContent =
+      `Loading ${bootstrap.pdfName}: ${Math.floor(percent)}% ` +
+      `(${formatBytes(loaded)} / ${formatBytes(total)})`;
+    return;
+  }
+  elements.status.textContent = `Loading ${bootstrap.pdfName}: ${formatBytes(loaded)}`;
 }
 
 async function loadPdf(url, ratio = scrollRatio(), allowAutomaticRetry = true) {
@@ -173,6 +275,7 @@ async function loadPdf(url, ratio = scrollRatio(), allowAutomaticRetry = true) {
   stopAnimation(undefined, false);
   requestedRatio = clamp(ratio, 0, 1);
   showReader();
+  beginStage('读取PDF', 30, 60);
   elements.status.textContent = `Loading ${bootstrap.pdfName}...`;
   const generation = ++renderGeneration;
 
@@ -186,10 +289,11 @@ async function loadPdf(url, ratio = scrollRatio(), allowAutomaticRetry = true) {
 
   try {
     loadingTask = pdfjsLib.getDocument({ url });
+    loadingTask.onProgress = updateLoadProgress;
     pdfDocument = await loadingTask.promise;
     if (generation !== renderGeneration) return false;
     await buildPages(requestedRatio);
-    elements.status.textContent = `${pdfDocument.numPages} pages`;
+    hideStage(`${pdfDocument.numPages} pages`);
     automaticRetryUsed = false;
     if (shouldResume) start();
     return true;
@@ -212,7 +316,9 @@ async function buildPages(ratio) {
   observer?.disconnect();
   elements.document.replaceChildren();
   pageEntries = [];
-  elements.status.textContent = 'Preparing pages...';
+  beginStage('准备页面', 60, 100, { smooth: false });
+  elements.status.textContent = `Preparing pages: 0 / ${pdfDocument.numPages}`;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
 
   for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
     const page = await pdfDocument.getPage(pageNumber);
@@ -230,6 +336,12 @@ async function buildPages(ratio) {
     holder.append(label);
     elements.document.append(holder);
     pageEntries.push({ pageNumber, page, viewport, holder, rendering: false });
+    updateStageProgress('准备页面', pageNumber / pdfDocument.numPages);
+    elements.status.textContent =
+      `Preparing pages: ${pageNumber} / ${pdfDocument.numPages}`;
+    if (pageNumber % 5 === 0) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
   }
 
   observer = new IntersectionObserver(onIntersection, {
@@ -240,7 +352,7 @@ async function buildPages(ratio) {
   await new Promise((resolve) => requestAnimationFrame(resolve));
   const maximum = elements.scroller.scrollHeight - elements.scroller.clientHeight;
   elements.scroller.scrollTop = clamp(ratio, 0, 1) * Math.max(0, maximum);
-  elements.status.textContent = `${pdfDocument.numPages} pages`;
+  hideStage(`${pdfDocument.numPages} pages`);
 }
 
 function onIntersection(entries) {
@@ -382,6 +494,11 @@ if (webviewState) {
   resumeAfterLoad = webviewState.running ?? resumeAfterLoad;
 }
 updateControls();
-loadPdf(currentPdfUrl, requestedRatio, true).finally(() => {
-  vscode.postMessage({ type: 'ready' });
-});
+async function bootstrapReader() {
+  beginStage('打开阅读器', 20, 30);
+  await new Promise((resolve) => setTimeout(resolve, 160));
+  await loadPdf(currentPdfUrl, requestedRatio, true).finally(() => {
+    vscode.postMessage({ type: 'ready' });
+  });
+}
+bootstrapReader();

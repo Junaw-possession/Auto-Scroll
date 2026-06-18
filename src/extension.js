@@ -23,10 +23,10 @@ function log(message, error) {
 
 function configuration() {
   const config = vscode.workspace.getConfiguration('latexAutoScroll');
-  let minimumSpeed = config.get('minimumSpeed', 5);
+  let minimumSpeed = config.get('minimumSpeed', 0);
   let maximumSpeed = config.get('maximumSpeed', 200);
   if (minimumSpeed >= maximumSpeed) {
-    minimumSpeed = 5;
+    minimumSpeed = 0;
     maximumSpeed = 200;
   }
   return {
@@ -155,6 +155,16 @@ class ReaderPanel {
       this.showDocumentError(this.document.validationError);
       return;
     }
+    this.panel.webview.html = this.loadingHtml('定位PDF', 0, 10);
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    this.panel.webview.html = this.loadingHtml('校验PDF', 10, 20);
+    try {
+      await validatePdfFile(this.pdfPath);
+    } catch (error) {
+      this.document.validationError = error;
+      this.showDocumentError(error);
+      return;
+    }
     this.panel.webview.html = this.readerHtml();
     this.watchPdf();
   }
@@ -234,6 +244,11 @@ class ReaderPanel {
     <span id="status">Loading ${escapeHtml(path.basename(this.pdfPath))}...</span>
   </header>
   <main id="scroller" tabindex="0" aria-label="PDF auto scroll reader">
+    <div id="loadProgress" class="load-progress" role="status" aria-live="polite" hidden>
+      <span>正在运行：</span>
+      <span id="stageName">打开阅读器</span>
+      <strong>0%</strong>
+    </div>
     <div id="document"></div>
     <div id="message" hidden>
       <p id="messageText"></p>
@@ -245,6 +260,58 @@ class ReaderPanel {
   </main>
   <script nonce="${nonce}">window.READER_BOOTSTRAP = ${safeJson(bootstrap)};</script>
   <script nonce="${nonce}" type="module" src="${this.mediaUri('reader.mjs')}"></script>
+</body>
+</html>`;
+  }
+
+  loadingHtml(stageName, start, end) {
+    const nonce = randomNonce();
+    const startPercent = Math.floor(clamp(start, 0, 100));
+    const targetPercent = Math.max(startPercent, Math.floor(clamp(end - 1, 0, 100)));
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="${this.csp(nonce)}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="${this.mediaUri('reader.css')}">
+  <title>PDF Auto Scroll Reader</title>
+</head>
+<body>
+  <header id="toolbar">
+    <span id="status">Loading ${escapeHtml(path.basename(this.pdfPath))}...</span>
+  </header>
+  <main id="scroller" tabindex="0" aria-label="PDF auto scroll reader">
+    <div id="loadProgress" class="load-progress" role="status" aria-live="polite">
+      <span>正在运行：</span>
+      <span id="stageName">${escapeHtml(stageName)}</span>
+      <strong>${startPercent}%</strong>
+    </div>
+  </main>
+  <script nonce="${nonce}">
+    const stageName = ${safeJson(stageName)};
+    const startPercent = ${startPercent};
+    const targetPercent = ${targetPercent};
+    const progress = document.querySelector('#loadProgress');
+    const value = progress.querySelector('strong');
+    const status = document.querySelector('#status');
+    const startedAt = performance.now();
+    const duration = 900;
+    function render(percent) {
+      const rounded = Math.floor(Math.max(startPercent, Math.min(targetPercent, percent)));
+      value.textContent = rounded + '%';
+      progress.title = '正在运行：' + stageName + ' ' + rounded + '%';
+      status.textContent = progress.title;
+    }
+    function tick(time) {
+      const ratio = Math.max(0, Math.min(1, (time - startedAt) / duration));
+      const eased = 1 - Math.pow(1 - ratio, 2);
+      render(startPercent + (targetPercent - startPercent) * eased);
+      if (ratio < 1) requestAnimationFrame(tick);
+    }
+    render(startPercent);
+    requestAnimationFrame(tick);
+  </script>
 </body>
 </html>`;
   }
@@ -443,11 +510,6 @@ class ReaderProvider {
         { code: 'UNSUPPORTED_SCHEME' }
       );
       return document;
-    }
-    try {
-      await validatePdfFile(uri.fsPath);
-    } catch (error) {
-      document.validationError = error;
     }
     return document;
   }

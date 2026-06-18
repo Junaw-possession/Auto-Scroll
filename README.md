@@ -11,7 +11,7 @@
 ## 安装
 
 ```powershell
-code --install-extension .\latex-auto-scroll-reader-0.3.1.vsix --force
+code --install-extension .\latex-auto-scroll-reader-0.3.7.vsix --force
 ```
 
 安装后重新启动 VS Code，或执行“开发人员: 重新加载窗口”。

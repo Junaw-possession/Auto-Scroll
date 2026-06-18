@@ -2,7 +2,7 @@
   "name": "latex-auto-scroll-reader",
   "displayName": "PDF Auto Scroll Reader",
   "description": "A teleprompter-style reader for any PDF, with optional SyncTeX navigation.",
-  "version": "0.3.1",
+  "version": "0.3.7",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -101,14 +101,14 @@
         "latexAutoScroll.defaultSpeed": {
           "type": "number",
           "default": 30,
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 1000,
           "description": "Default scrolling speed in pixels per second."
         },
         "latexAutoScroll.minimumSpeed": {
           "type": "number",
-          "default": 5,
-          "minimum": 1,
+          "default": 0,
+          "minimum": 0,
           "maximum": 1000,
           "description": "Minimum speed shown by the reader slider."
         },
